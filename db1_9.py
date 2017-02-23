@@ -98,7 +98,7 @@ class DatabaseUtility:
     ## Obter tabela dos ultimos tempos
     def GetTable_last_data(self, data, hora, tempo,cor):
         self.CreateTable()
-        return self.RunCommand("SELECT DISTINCT  %s,%s,%s, %s"
+        return self.RunCommand("SELECT DISTINCT  %s,%s,%s, %s, ID"
                                " FROM %s "
                                "where linha = '%s'"
                                "ORDER BY ID DESC "

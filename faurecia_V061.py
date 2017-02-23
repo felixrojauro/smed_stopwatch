@@ -7,12 +7,15 @@ from datetime import datetime, timedelta
 import sys
 import time
 import threading
-import RPi.GPIO as GPIO
+#import RPi.GPIO as GPIO
 import UI10
 import db1_9
 from openpyxl import Workbook
 from openpyxl.reader.excel import load_workbook
 import xlsxwriter
+import json
+import logging
+logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 try:
     _fromUtf8 = QtCore.Qunicodeing.fromUtf8
@@ -340,36 +343,51 @@ class initUI:
             global valor
             global test
 
-            # Sinal a entrar -> corre a contagem
-            while (GPIO.input(18) == False and self.running == 1):
-                self.timer.start(80)
+            global pin
 
-                ## Se troax aberto iniciar tempo
-                if aberto == False:
-                    aberto = True
+            with open('simulate_gpio.json') as gpio_simulator:
+                pin = json.loads(gpio_simulator.read())
+                logging.info("just read following input value: %s", pin['bcm'][18])
+                # Sinal a entrar -> corre a contagem
+                # test wejścia 18
+#                while (GPIO.input(18) == False and self.running == 1):
+            while (pin['bcm'][18] == False and self.running == 1):
+                    with open('simulate_gpio.json') as gpio_simulator:
+                        pin = json.loads(gpio_simulator.read())
+                        logging.info("just read following input value: %s", pin['bcm'][18])
+                    self.timer.start(80)
 
-                # Iniciar contagem de tempo
-                self.contagem()
-                input_state = GPIO.input(18)
+                    ## Se troax aberto iniciar tempo
+                    if aberto == False:
+                        aberto = True
 
-            # Sinal fechado -> actualiza interface
-            while (GPIO.input(18) == True and self.running == 1):
-                MainWindow.someFunctionCalledFromAnotherThread("grey")
-                ##Se troax fechado
-                inicio = True
-                aberto = False
-                # Actualiza ultimo tempo no interface
-                # Limpa tempo actual
-                if (ultimo != 0):
-                    thread3 = threading.Thread(target=self.insereDB, args=(tempo,))
-                    thread3.start()
+                    # Iniciar contagem de tempo
+                    self.contagem()
+#                    input_state = GPIO.input(18)
+                    input_state = pin['bcm'][18]
 
-                ultimo = 0
-                if test == True:
+                # Sinal fechado -> actualiza interface
+#                while (GPIO.input(18) == True and self.running == 1):
+            while (pin['bcm'][18] == True and self.running == 1):
+                    with open('simulate_gpio.json') as gpio_simulator:
+                        pin = json.loads(gpio_simulator.read())
+                        logging.info("just read following input value: %s", pin['bcm'][18])
                     MainWindow.someFunctionCalledFromAnotherThread("grey")
-                    test= False
+                    ##Se troax fechado
+                    inicio = True
+                    aberto = False
+                    # Actualiza ultimo tempo no interface
+                    # Limpa tempo actual
+                    if (ultimo != 0):
+                        thread3 = threading.Thread(target=self.insereDB, args=(tempo,))
+                        thread3.start()
 
-                time.sleep(velocidade)
+                    ultimo = 0
+                    if test == True:
+                        MainWindow.someFunctionCalledFromAnotherThread("grey")
+                        test= False
+
+                    time.sleep(velocidade)
 
 
     def insereDB(self,  temp):
@@ -436,7 +454,7 @@ class initUI:
 
     def obterArrayDeValoresConvertidos(self,tabela):
         array3 = []
-        for data, hora, tempo, cor in tabela:
+        for data, hora, tempo, cor, unused_id in tabela:
             data = unicode(data.day) + "-" + unicode(data.month) + "-" + unicode(data.year)
             hora = unicode(hora)
 
@@ -466,8 +484,8 @@ class initUI:
 
 
 # Configuracao GPIO's
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(18, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+#GPIO.setmode(GPIO.BCM)
+#GPIO.setup(18, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 
 settingsWorkbook = Workbook()
