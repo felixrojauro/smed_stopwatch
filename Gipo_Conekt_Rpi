@@ -1,0 +1,34 @@
+Its working now
+still missing translation on export file . Sorry about that. Anyway its fairly easy to understand
+
+
+ok. I understand
+and thank You very much 
+
+no problem now you need to connect it to the relay 
+
+to test it you can put a simple wire between gpio 18 and ground
+
+CAn you see the image ? you need to plug wire between GPIO18 and any GND 
+
+yes pin 25 and 18?
+
+no no . Gpio18 is pin 12
+ground it can be pin 25 or other 
+
+ok, Gipo18 is 24v end 12 (-) yes or not?
+
+Nie :) gpio is 5v max
+you must use a relay that comutates at 24v from troax and then on the other side of relay 
+
+to ACT as interrupt 
+
+
+TAK, zrozumiałem Cię :-) Yes no problem
+
+Thansks You very much me supprt :-)
+
+De nada !( your welcome) . Please dont put 24v on raspberry , it will burn !! 
+ spio18 is already 5v and makes program work when it closes with gnd
+ any question contact me 
+ Yes, yes thank you.
