@@ -96,28 +96,28 @@ class DatabaseUtility:
 
 
     ## Obter tabela dos ultimos tempos
-    def GetTable_last_data(self, data, hora, tempo,cor):
+    def GetTable_last_data(self, data, hora, tempo,cor, loggedUser):
         self.CreateTable()
-        return self.RunCommand("SELECT DISTINCT  %s,%s,%s, %s, ID"
+        return self.RunCommand("SELECT %s,%s,%s, %s, %s"
                                " FROM %s "
                                "where linha = '%s'"
-                               "ORDER BY ID DESC "
-                               "LIMIT %d ;" % (data, hora, tempo, cor, self.tableName,self.linha, self.queryLinesLimit))
+                               "ORDER BY `ID` DESC "
+                               "LIMIT %d ;" % (data, hora, tempo, cor, loggedUser, self.tableName,self.linha, self.queryLinesLimit))
 
 
     ## Obter tabela dos melhores tempos
-    def GetTable_best_data(self, data, hora, tempo,cor):
+    def GetTable_best_data(self, data, hora, tempo,cor, loggedUser):
         self.CreateTable()
         limiteTempoInferior = self.obterValorlimite(self.tempoMinimo)
         limiteTempoSuperior = self.obterValorlimite(self.tempoMaximo)
-        return self.RunCommand("SELECT DISTINCT  %s,%s,%s,%s "
+        return self.RunCommand("SELECT DISTINCT  %s,%s,%s,%s,%s "
                                "FROM %s "
                                "WHERE linha = '%s' "
                                "and tempo > '%s' "
                                "and tempo < '%s' "
                                "ORDER BY tempo ASC "
                                "LIMIT %d ;"
-                               % (data, hora, tempo, cor, self.tableName,self.linha, limiteTempoInferior, limiteTempoSuperior, self.queryLinesLimit))
+                               % (data, hora, tempo, cor, loggedUser, self.tableName,self.linha, limiteTempoInferior, limiteTempoSuperior, self.queryLinesLimit))
 
 
 
@@ -154,7 +154,7 @@ class DatabaseUtility:
 
 
     ##Adiciona registo a base de dados
-    def AddEntryToTable(self,  tempo, linia):
+    def AddEntryToTable(self,  tempo, linia, loggedUser):
         print "Chamado a colocar"
         date1 = datetime.now().strftime("%y-%m-%d")
         time2 = datetime.now().strftime("%H:%M:%S")
@@ -202,8 +202,8 @@ class DatabaseUtility:
             teste = self.RunCommand2()
             sol = [seq[0] for seq in teste][0]
             d = sol
-        cmd = " INSERT INTO " + self.tableName + " (linha,data, hora, tempo, cor, tipo)"
-        cmd += " VALUES ('%s','%s', '%s', '%s' , '%s' , '%s');" % (linia, date1, time2, ultimo,s,d )
+        cmd = " INSERT INTO " + self.tableName + " (linha,data, hora, tempo, cor, tipo, user)"
+        cmd += " VALUES ('%s','%s', '%s', '%s' , '%s' , '%s', '%s');" % (linia, date1, time2, ultimo,s,d, loggedUser )
         self.RunCommand(cmd)
 
 

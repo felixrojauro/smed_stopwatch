@@ -1,6 +1,6 @@
 #!/usr/bin/python -u
 # -*- coding: utf-8 -*-
-import sys,  threading, random, Queue
+import sys,  threading, random, Queue, codecs
 
 from PyQt4 import QtGui, QtCore
 from datetime import datetime, timedelta
@@ -13,9 +13,17 @@ import db1_9
 from openpyxl import Workbook
 from openpyxl.reader.excel import load_workbook
 import xlsxwriter
+
 import json
 import logging
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+
+import snap7 # for Siemens PLC communication
+import serial # for reading RFID card
+
+import signal
+import os
+signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 try:
     _fromUtf8 = QtCore.Qunicodeing.fromUtf8
@@ -23,7 +31,57 @@ except AttributeError:
     def _fromUtf8(s):
         return s
 
+## RFID Thread
 
+class RfidReadingObject(QtCore.QObject):
+
+    readUser = QtCore.pyqtSignal([str])
+    finished = QtCore.pyqtSignal()
+
+    def __init__(self):
+        QtCore.QObject.__init__(self)
+
+    def run(self):
+        rfid_port = '/dev/pts/28'
+        with open('rfid_port') as rfid_port_file:
+            rfid_port = rfid_port_file.read().strip()
+        rfid_baud = 9600
+        rfid = self.openSerialPort(rfid_port, rfid_baud)
+
+        while True:
+            reading = rfid.readline().decode()
+            if (len(reading) > 0):
+                detectedUser = self.detectLoggedUserChange(reading)
+                logging.info("Assigned to: %s", detectedUser)
+                self.readUser.emit(detectedUser)
+            time.sleep(1)
+
+        # emit the finished signal - we're done
+        self.finished.emit()
+
+
+    def detectLoggedUserChange(self, newUserRfid):
+        print(newUserRfid)
+        with codecs.open('RFid', encoding='utf-8') as employeeFile:
+            employeeList = employeeFile.readlines()
+            print(employeeList)
+            for singleEmployee in employeeList:
+                print(singleEmployee)
+                if (singleEmployee.split("::")[0].strip() == newUserRfid.strip()):
+                    return singleEmployee.split("::")[1].strip()
+        return ""
+
+
+    def openSerialPort(self, rfid_port, rfid_baud):
+        try:
+            serialport = serial.Serial(rfid_port, rfid_baud, timeout=0)
+        except:
+            logging.info("Cannot open %s. Exiting.", port)
+            os.kill(os.getpid(), signal.SIGINT)
+        if (serialport.isOpen() == False):
+            logging.info("Cannot open %s. Exiting.", port)
+            os.kill(os.getpid(), signal.SIGINT)
+        return serialport
 
 ## Load image from thread
 class LoadImageThread(QtCore.QThread):
@@ -39,9 +97,20 @@ class LoadImageThread(QtCore.QThread):
   def run(self):
     self.emit(QtCore.SIGNAL('showImage(QString, int, int)'), self.file, self.w, self.h)
 
-
 class MyWindow(QtGui.QMainWindow):
 
+    loggedInUser = ""
+
+    def initMessageBox(self):
+        # Create a custom font (BIG one)
+        font = QtGui.QFont()
+        font.setFamily("Arial")
+        font.setPointSize(60)
+
+        self.messageBox = QtGui.QMessageBox()
+        self.messageBox.setIcon(QtGui.QMessageBox.Warning)
+        self.messageBox.setStandardButtons(QtGui.QMessageBox.Ok)
+        self.messageBox.setFont(font)
 
     #Close App
     def closeEvent(self,event):
@@ -64,6 +133,24 @@ class MyWindow(QtGui.QMainWindow):
         pixmap = QtGui.QPixmap(filename).scaled(w, h)
         ui.gui.bola.setPixmap(pixmap)
 
+    def handleLoggedUserChanged(self, newUser):
+        if not newUser:
+            print("no user read")
+            return
+        if newUser == self.loggedInUser:
+            print("logging out: %s", newUser)
+            self.loggedInUser = ""
+        else:
+            print("logging in: %s", newUser)
+            self.loggedInUser = newUser
+            self.messageBox.done(1)
+        ui.gui.label_logged_in_name.setText(unicode(self.loggedInUser))
+
+    def showMessageBox(self, text, title):
+        self.messageBox.setText(text)
+        self.messageBox.setWindowTitle(title)
+        return self.messageBox.exec_()
+
     #init function
     def __init__(self,parent=None):
 
@@ -75,14 +162,21 @@ class MyWindow(QtGui.QMainWindow):
         self.timer.timeout.connect(self.displayTime)
         self.timer.start()
 
+        #initialize messagebox
+        self.initMessageBox()
 
 #Init UI Class
-class initUI:
+class initUI(QtCore.QObject):
 
+
+    showMessageBoxSignal = QtCore.pyqtSignal('QString', 'QString')
+    messageBoxVisible = False
 
     # Inicia a aplicacao global
     # Define queue , timer e inicia loop principal de contagem
     def __init__(self, databaseName, tableName, queryLinesLimit, country, settingsWorksheet):
+
+        super(initUI, self).__init__()
         # Create the queue
         self.queue = Queue.Queue()
 
@@ -131,12 +225,29 @@ class initUI:
         thread1 = threading.Thread(target=self.cronometro)
         thread1.start()
 
+        #RFID reader thread
+        self.rfidThread = QtCore.QThread()
+        self.rfidWorker = RfidReadingObject()
+
+        self.rfidWorker.moveToThread(self.rfidThread)
+        self.rfidWorker.finished.connect(self.rfidThread.quit)
+        self.rfidWorker.finished.connect(self.rfidWorker.deleteLater)
+
+        self.rfidThread.started.connect(self.rfidWorker.run)
+        self.rfidThread.finished.connect(self.rfidWorker.deleteLater)
+        self.rfidThread.finished.connect(self.rfidThread.deleteLater)
+
+        self.rfidWorker.readUser.connect(MainWindow.handleLoggedUserChanged)
+
+        self.rfidThread.start()
 
     def defineUI(self, myUI ,country, settingsWorksheet):
         global dbu
         global tempoObjectivo
         global line
 
+        messageBoxText = ""
+        messageBoxTitle = ""
 
         #Depending on language it defines UI
 
@@ -167,6 +278,11 @@ class initUI:
             myUI.actionPortugues.setText("%s" % (unicode(settingsWorksheet['H13'].value)))
             myUI.actionPolaco.setText("%s" % (unicode(settingsWorksheet['H14'].value)))
             myUI.tempo.setText("00:00.000")
+            myUI.label_logged_in.setText("%s" % (unicode(settingsWorksheet['H15'].value)))
+            self.messageBoxText = "%s" % (unicode(settingsWorksheet['H16'].value))
+            self.messageBoxTitle = "%s" % (unicode(settingsWorksheet['H17'].value))
+            myUI.label_user_latest.setText("%s" % (unicode(settingsWorksheet['H18'].value)))
+            myUI.label_user_best.setText("%s" % (unicode(settingsWorksheet['H18'].value)))
             self.saveCountry("PT")
 
 
@@ -197,13 +313,20 @@ class initUI:
             myUI.menuMudar_idioma.setTitle("%s" % (unicode(settingsWorksheet['I12'].value)))
             myUI.actionPortugues.setText("%s" % (unicode(settingsWorksheet['I13'].value)))
             myUI.actionPolaco.setText("%s" % (unicode(settingsWorksheet['I14'].value)))
+            myUI.label_logged_in.setText("%s" % (unicode(settingsWorksheet['I15'].value)))
             myUI.tempo.setText("00:00.000")
+            self.messageBoxText = "%s" % (unicode(settingsWorksheet['I16'].value))
+            self.messageBoxTitle = "%s" % (unicode(settingsWorksheet['I17'].value))
+            myUI.label_user_latest.setText("%s" % (unicode(settingsWorksheet['I18'].value)))
+            myUI.label_user_best.setText("%s" % (unicode(settingsWorksheet['I18'].value)))
             self.saveCountry("PL")
 
 
 
         myUI.label_ultimos.setStyleSheet('color : black')
         myUI.label_melhores.setStyleSheet('color : black')
+        myUI.label_user_best.setStyleSheet('color : black')
+        myUI.label_user_latest.setStyleSheet('color : black')
 
 
     def saveCountry(self, newCountry):
@@ -243,7 +366,7 @@ class initUI:
 
 
     def displayTime(self):
-        self.gui.data_hora.setText(QtCore.QDateTime.currentDateTime().toString())
+        self.gui.data_hora.setText(QtCore.QDateTime.currentDateTime().toString())     
 
     def periodico(self):
 
@@ -328,12 +451,39 @@ class initUI:
 
     # Verifica o estado do sinal imput e dependendo do mesmo corre a funcao de contagem ou actualiza o ecra
 
+    def connectPlc(self):
+        with open('plc_ip') as plc_ip_file:
+            plc_ip_read_data = plc_ip_file.read().split(":")
+            plc_ip = plc_ip_read_data[0]
+            plc_port = int(plc_ip_read_data[len(plc_ip_read_data) - 1])
+        logging.info("connecting to PLC: %s, port: %s", plc_ip, plc_port)
+        plc = snap7.client.Client()
+        try:
+            plc.connect(plc_ip,11,11,plc_port)
+        except:
+            logging.info("Cannot connect to plc: %s on port: %s. Exiting", plc_ip, plc_port)
+            os.kill(os.getpid(), signal.SIGINT)
+        logging.info("plc connected: %s", plc.get_connected())        
+    
+    def tempReadInput(self):
+        with open('simulate_gpio.json') as gpio_simulator:
+            input_var = bool(json.loads(gpio_simulator.read())['bcm'][18])
+            return input_var
+
+    def messageBoxClosed(self, buttonClicked):
+        self.messageBoxVisible = False
+
     def cronometro(self):
 
+        global plc_ip
+        global plc_port
+        global input_state
+        global serialport
 
-
-
+        self.connectPlc()
+        input_state = self.tempReadInput()
         # Corre se a aplicacao estiver a correr
+
         while (self.running == 1):
 
             global aberto
@@ -343,18 +493,18 @@ class initUI:
             global valor
             global test
 
-            global pin
-
-            with open('simulate_gpio.json') as gpio_simulator:
-                pin = json.loads(gpio_simulator.read())
-                logging.info("just read following input value: %s", pin['bcm'][18])
                 # Sinal a entrar -> corre a contagem
                 # test wejścia 18
 #                while (GPIO.input(18) == False and self.running == 1):
-            while (pin['bcm'][18] == False and self.running == 1):
-                    with open('simulate_gpio.json') as gpio_simulator:
-                        pin = json.loads(gpio_simulator.read())
-                        logging.info("just read following input value: %s", pin['bcm'][18])
+
+            while (input_state == False and self.running == 1):
+                if len(MainWindow.loggedInUser) == 0:
+                    if self.messageBoxVisible == False:
+                        self.showMessageBoxSignal.emit(self.messageBoxText, self.messageBoxTitle)
+                        self.messageBoxVisible = True
+                else:
+                    input_state = self.tempReadInput()
+            
                     self.timer.start(80)
 
                     ## Se troax aberto iniciar tempo
@@ -364,14 +514,12 @@ class initUI:
                     # Iniciar contagem de tempo
                     self.contagem()
 #                    input_state = GPIO.input(18)
-                    input_state = pin['bcm'][18]
 
                 # Sinal fechado -> actualiza interface
 #                while (GPIO.input(18) == True and self.running == 1):
-            while (pin['bcm'][18] == True and self.running == 1):
-                    with open('simulate_gpio.json') as gpio_simulator:
-                        pin = json.loads(gpio_simulator.read())
-                        logging.info("just read following input value: %s", pin['bcm'][18])
+            while (input_state == True and self.running == 1):
+                    input_state = self.tempReadInput()
+
                     MainWindow.someFunctionCalledFromAnotherThread("grey")
                     ##Se troax fechado
                     inicio = True
@@ -394,7 +542,7 @@ class initUI:
         global test
         global tempo
         global line
-        self.dbu.AddEntryToTable(temp, line)
+        self.dbu.AddEntryToTable(temp, line, MainWindow.loggedInUser)
 
 
         self.updateUltimos()
@@ -413,7 +561,7 @@ class initUI:
     def updateUltimos(self):
 
         ## Faz query a base de dados dos dados a apresentar na tabela
-        tabela = self.dbu.GetTable_last_data("data", "hora", "tempo", "cor")
+        tabela = self.dbu.GetTable_last_data("data", "hora", "tempo", "cor", "user")
 
         ## Obtem um array os valores convertidos para apresentar na tabela
         dados= self.obterArrayDeValoresConvertidos(tabela)
@@ -422,39 +570,57 @@ class initUI:
         for valor in range(0, len(dados)):
 
             itemTempo= self.itemParalinhaDaTabela(0, dados, valor, 19)
-            itemTempo.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignCenter)
+            itemTempo.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
             self.gui.tabela_ultimos.setItem(valor, 0, itemTempo)
 
             itemDataHora = self.itemParalinhaDaTabela(1,dados,valor,15)
             itemDataHora.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
             self.gui.tabela_ultimos.setItem(valor, 1, itemDataHora)
 
+            itemUser = self.itemParalinhaDaTabela(3, dados, valor, 15)
+            itemUser.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
+            itemUser.setText(self.getFirstThreeLettersOfUser((dados[valor])[3]))
 
+            self.gui.tabela_ultimos.setItem(valor, 2, itemUser)
+
+    def getFirstThreeLettersOfUser(self, user):
+        list = user.split(" ")
+        logging.info(list)
+        strippedUser = ""
+        if (len(list) >= 2):
+            strippedUser = list[0][:3] + list[1][:3]
+        return strippedUser
 
     ### Update dos melhores tempos
     def updateMelhores(self):
 
+        logging.info("UPDATING MELHORES! :D")
         ## Faz query a base de dados dos dados a apresentar na tabela
-        tabela = self.dbu.GetTable_best_data("data", "hora", "tempo", "cor")
-
+        tabela = self.dbu.GetTable_best_data("data", "hora", "tempo", "cor", "user")
+        logging.info("tabela: %s", tabela)
         ## Obtem um array os valores convertidos para apresentar na tabela
         dados = self.obterArrayDeValoresConvertidos(tabela)
-
+        logging.info("dados: %s", dados)
         ## Apresenta as linhas na tabela de acordo com as configuracoes de cor, tamabho de letra e centramento
         for valor in range(0, len(dados)):
             itemTempo = self.itemParalinhaDaTabela(0, dados, valor, 19)
-            itemTempo.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignCenter)
+            itemTempo.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
             self.gui.tabela_melhores.setItem(valor, 0, itemTempo)
 
             itemDataHora = self.itemParalinhaDaTabela(1, dados, valor, 15)
             itemDataHora.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
             self.gui.tabela_melhores.setItem(valor, 1, itemDataHora)
 
+            itemUser = self.itemParalinhaDaTabela(3, dados, valor, 15)
+            itemUser.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
+            itemUser.setText(self.getFirstThreeLettersOfUser((dados[valor])[3]))
+
+            self.gui.tabela_melhores.setItem(valor, 2, itemUser)
 
 
     def obterArrayDeValoresConvertidos(self,tabela):
         array3 = []
-        for data, hora, tempo, cor, unused_id in tabela:
+        for data, hora, tempo, cor, loggedUser in tabela:
             data = unicode(data.day) + "-" + unicode(data.month) + "-" + unicode(data.year)
             hora = unicode(hora)
 
@@ -469,7 +635,7 @@ class initUI:
             tempo = tempo[:9]
             tempo = tempo.encode('ascii', 'ignore')
 
-            array3.append((unicode(tempo), unicode(line), unicode(cor)))
+            array3.append((unicode(tempo), unicode(line), unicode(cor), unicode(loggedUser)))
         return array3
 
     def itemParalinhaDaTabela(self, coluna, array, valor, fontSize):
@@ -512,6 +678,7 @@ test = True
 ultimo = 0
 velocidade = 0.5
 valor = 0
+logged_user = ""
 
 
 
@@ -543,6 +710,8 @@ app = QtGui.QApplication(sys.argv)
 MainWindow = MyWindow()
 text = QtGui.QInputDialog()
 ui = initUI(databaseName, tableName, queryLinesLimit, country, settingsWorksheet)
+ui.showMessageBoxSignal.connect(MainWindow.showMessageBox)
+MainWindow.messageBox.buttonClicked.connect(ui.messageBoxClosed)
 MainWindow.show()
 sys.exit(app.exec_())
 
