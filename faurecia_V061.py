@@ -20,7 +20,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 import snap7 # for Siemens PLC communication
 import S7200 as plc200 # helper for S7 200 alikes
-import S71200 as plc1200 # helper for S7 120 alikes
+#import S71200 as plc1200 # helper for S7 120 alikes
 import serial # for reading RFID card
 
 import signal
@@ -173,6 +173,7 @@ class initUI(QtCore.QObject):
 
     showMessageBoxSignal = QtCore.pyqtSignal('QString', 'QString')
     messageBoxVisible = False
+    
 
     # Inicia a aplicacao global
     # Define queue , timer e inicia loop principal de contagem
@@ -329,7 +330,8 @@ class initUI(QtCore.QObject):
         myUI.label_melhores.setStyleSheet('color : black')
         myUI.label_user_best.setStyleSheet('color : black')
         myUI.label_user_latest.setStyleSheet('color : black')
-
+	myUI.tabela_ultimos.setColumnWidth(1,200)
+	myUI.tabela_melhores.setColumnWidth(1,200)
 
     def saveCountry(self, newCountry):
 
@@ -461,14 +463,14 @@ class initUI(QtCore.QObject):
             plc_rack = int(plc_ip_read_data[2])
             plc_slot = int(plc_ip_read_data[3])
         logging.info("connecting to PLC: %s, port: %s, rack: %s, slot: %s", plc_ip, plc_port, plc_rack, plc_slot)
-#        plc = snap7.client.Client()
+        #plc = snap7.client.Client()
         try:
             plc = plc200.S7_200(plc_ip, plc_rack, plc_slot, debug=True)
 #            plc.connect(plc_ip,plc_rack,plc_slot,plc_port)
         except:
             logging.info("Cannot connect to plc: %s on port: %s (rack: %s, slot: %s). Exiting", plc_ip, plc_port, plc_rack, plc_slot)
             os.kill(os.getpid(), signal.SIGINT)
-        logging.info("plc connected: %s", plc.get_connected())
+        #logging.info("plc connected: %s", plc.get_connected())
         return plc
     
     def tempReadInput(self):
@@ -476,9 +478,27 @@ class initUI(QtCore.QObject):
             input_var = bool(json.loads(gpio_simulator.read())['bcm'][18])
             return input_var
 
-    def readInput(self):
+    def readInput(self,plc):
+        myInput = ""
+        with open('plc_data') as plc_data_file:
+            plc_data_list = plc_data_file.readlines()
+            myInput = plc_data_list[1]
+        return plc.getMem(myInput)
+    
+    def setHorn(self,plc,status):
+        myOutput = ""
+        with open('plc_data') as plc_data_file:
+            plc_data_list = plc_data_file.readlines()
+            myOutput = plc_data_list[3]
+        plc.writeMem(myOutput,status)
 
-
+    def setRelay(self,plc,status):
+        myOutput = ""
+        with open('plc_data') as plc_data_file:
+            plc_data_list = plc_data_file.readlines()
+            myOutput = plc_data_list[5]
+        plc.writeMem(myOutput,status)
+    
     def messageBoxClosed(self, buttonClicked):
         self.messageBoxVisible = False
 
@@ -499,8 +519,7 @@ class initUI(QtCore.QObject):
 #print plc.getMem('QX0.0')
 
         myPlc = self.connectPlc()
-        input_state = myPlc.getMem('IX0.0')
-        input_state = self.tempReadInput()
+        input_state = self.readInput(myPlc)
         # Corre se a aplicacao estiver a correr
 
         while (self.running == 1):
@@ -522,7 +541,7 @@ class initUI(QtCore.QObject):
                         self.showMessageBoxSignal.emit(self.messageBoxText, self.messageBoxTitle)
                         self.messageBoxVisible = True
                 else:
-                    input_state = self.tempReadInput()
+                    input_state = self.readInput(myPlc)
             
                     self.timer.start(80)
 
@@ -537,7 +556,7 @@ class initUI(QtCore.QObject):
                 # Sinal fechado -> actualiza interface
 #                while (GPIO.input(18) == True and self.running == 1):
             while (input_state == True and self.running == 1):
-                    input_state = self.tempReadInput()
+                    self.readInput(myPlc)
 
                     MainWindow.someFunctionCalledFromAnotherThread("grey")
                     ##Se troax fechado
@@ -596,7 +615,7 @@ class initUI(QtCore.QObject):
             itemDataHora.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
             self.gui.tabela_ultimos.setItem(valor, 1, itemDataHora)
 
-            itemUser = self.itemParalinhaDaTabela(3, dados, valor, 15)
+            itemUser = self.itemParalinhaDaTabela(3, dados, valor, 10)
             itemUser.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
             itemUser.setText(self.getFirstThreeLettersOfUser((dados[valor])[3]))
 
@@ -626,7 +645,7 @@ class initUI(QtCore.QObject):
             itemDataHora.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
             self.gui.tabela_melhores.setItem(valor, 1, itemDataHora)
 
-            itemUser = self.itemParalinhaDaTabela(3, dados, valor, 15)
+            itemUser = self.itemParalinhaDaTabela(3, dados, valor, 10)
             itemUser.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
             itemUser.setText(self.getFirstThreeLettersOfUser((dados[valor])[3]))
 

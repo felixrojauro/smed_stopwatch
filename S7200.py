@@ -13,9 +13,9 @@ class output(object):
 class S7_200():
     def __init__(self,ip,localtsap,remotetsap,debug=False):
         self.plc = snap7.client.Client()
-        self.plc.set_connection_params(ip,localtsap,remotetsap)
+        #self.plc.set_connection_params(ip,localtsap,remotetsap)
         self.debug=debug
-        self.plc.connect()
+        self.plc.connect(ip,localtsap,remotetsap,102)
         if(self.plc.get_connected()):
 			print 'connected'
     def getMem(self,mem, returnByte=False):
