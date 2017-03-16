@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import sys
 import time
 import threading
+# we are not using RPi GPIO in current solution, connecting directly to PLC
 #import RPi.GPIO as GPIO
 import UI10
 import db1_9
@@ -20,7 +21,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 import snap7 # for Siemens PLC communication
 import S7200 as plc200 # helper for S7 200 alikes
-#import S71200 as plc1200 # helper for S7 120 alikes
+#import S71200 as plc1200 # helper for S7 1200 alikes
 import serial # for reading RFID card
 
 import signal
@@ -33,7 +34,8 @@ except AttributeError:
     def _fromUtf8(s):
         return s
 
-## RFID Thread
+## RFID Thread - not used since used RFID card reader does not write to serialport, but
+##               directly to stdout - just like a normal keyboard
 
 class RfidReadingObject(QtCore.QObject):
 
@@ -63,12 +65,10 @@ class RfidReadingObject(QtCore.QObject):
 
 
     def detectLoggedUserChange(self, newUserRfid):
-        print(newUserRfid)
+        logging.info(newUserRfid)
         with codecs.open('RFid', encoding='utf-8') as employeeFile:
             employeeList = employeeFile.readlines()
-            print(employeeList)
             for singleEmployee in employeeList:
-                print(singleEmployee)
                 if (singleEmployee.split("::")[0].strip() == newUserRfid.strip()):
                     return singleEmployee.split("::")[1].strip()
         return ""
@@ -135,23 +135,43 @@ class MyWindow(QtGui.QMainWindow):
         pixmap = QtGui.QPixmap(filename).scaled(w, h)
         ui.gui.bola.setPixmap(pixmap)
 
+
+
+
+    def rfidTextEditReturnPressed(self):
+        detectedUser = self.detectLoggedUserChange(ui.gui.rfid_text_edit.text())
+        self.handleLoggedUserChanged(detectedUser)
+
+    def detectLoggedUserChange(self, newUserRfid):
+        with codecs.open('RFid', encoding='utf-8') as employeeFile:
+            employeeList = employeeFile.readlines()
+            for singleEmployee in employeeList:
+                if (singleEmployee.split("::")[0].strip() == newUserRfid.trimmed()):
+                    return singleEmployee.split("::")[1].strip()
+        return ""
+
     def handleLoggedUserChanged(self, newUser):
         if not newUser:
-            print("no user read")
+            logging.info("no user assigned to RFID card: %s", ui.gui.rfid_text_edit.text())
+            ui.gui.rfid_text_edit.clear()
             return
         if newUser == self.loggedInUser:
-            print("logging out: %s", newUser)
+            logging.info("logging out: %s", newUser)
             self.loggedInUser = ""
         else:
-            print("logging in: %s", newUser)
+            logging.info("logging in: %s", newUser)
             self.loggedInUser = newUser
             self.messageBox.done(1)
         ui.gui.label_logged_in_name.setText(unicode(self.loggedInUser))
+        ui.gui.rfid_text_edit.clear()
 
     def showMessageBox(self, text, title):
         self.messageBox.setText(text)
         self.messageBox.setWindowTitle(title)
         return self.messageBox.exec_()
+
+
+
 
     #init function
     def __init__(self,parent=None):
@@ -228,21 +248,23 @@ class initUI(QtCore.QObject):
         thread1 = threading.Thread(target=self.cronometro)
         thread1.start()
 
-        #RFID reader thread
-        self.rfidThread = QtCore.QThread()
-        self.rfidWorker = RfidReadingObject()
+        #RFID reader thread - not used since used RFID card reader does not write to serialport, but
+        #                     directly to stdout - just like a normal keyboard
 
-        self.rfidWorker.moveToThread(self.rfidThread)
-        self.rfidWorker.finished.connect(self.rfidThread.quit)
-        self.rfidWorker.finished.connect(self.rfidWorker.deleteLater)
+#        self.rfidThread = QtCore.QThread()
+#        self.rfidWorker = RfidReadingObject()
 
-        self.rfidThread.started.connect(self.rfidWorker.run)
-        self.rfidThread.finished.connect(self.rfidWorker.deleteLater)
-        self.rfidThread.finished.connect(self.rfidThread.deleteLater)
+#        self.rfidWorker.moveToThread(self.rfidThread)
+#        self.rfidWorker.finished.connect(self.rfidThread.quit)
+#        self.rfidWorker.finished.connect(self.rfidWorker.deleteLater)
 
-        self.rfidWorker.readUser.connect(MainWindow.handleLoggedUserChanged)
+#        self.rfidThread.started.connect(self.rfidWorker.run)
+#        self.rfidThread.finished.connect(self.rfidWorker.deleteLater)
+#        self.rfidThread.finished.connect(self.rfidThread.deleteLater)
 
-        self.rfidThread.start()
+#        self.rfidWorker.readUser.connect(MainWindow.handleLoggedUserChanged)
+
+#        self.rfidThread.start()
 
     def defineUI(self, myUI ,country, settingsWorksheet):
         global dbu
@@ -330,8 +352,11 @@ class initUI(QtCore.QObject):
         myUI.label_melhores.setStyleSheet('color : black')
         myUI.label_user_best.setStyleSheet('color : black')
         myUI.label_user_latest.setStyleSheet('color : black')
-	myUI.tabela_ultimos.setColumnWidth(1,200)
-	myUI.tabela_melhores.setColumnWidth(1,200)
+        myUI.tabela_ultimos.setColumnWidth(1,200)
+        myUI.tabela_melhores.setColumnWidth(1,200)
+
+        myUI.tabela_ultimos.setDisabled(True)
+        myUI.tabela_melhores.setDisabled(True)
 
     def saveCountry(self, newCountry):
 
@@ -463,14 +488,11 @@ class initUI(QtCore.QObject):
             plc_rack = int(plc_ip_read_data[2])
             plc_slot = int(plc_ip_read_data[3])
         logging.info("connecting to PLC: %s, port: %s, rack: %s, slot: %s", plc_ip, plc_port, plc_rack, plc_slot)
-        #plc = snap7.client.Client()
         try:
             plc = plc200.S7_200(plc_ip, plc_rack, plc_slot, debug=True)
-#            plc.connect(plc_ip,plc_rack,plc_slot,plc_port)
         except:
             logging.info("Cannot connect to plc: %s on port: %s (rack: %s, slot: %s). Exiting", plc_ip, plc_port, plc_rack, plc_slot)
             os.kill(os.getpid(), signal.SIGINT)
-        #logging.info("plc connected: %s", plc.get_connected())
         return plc
     
     def tempReadInput(self):
@@ -511,12 +533,9 @@ class initUI(QtCore.QObject):
         global input_state
         global serialport
 
-#plc = p.S7_200('10.10.55.250',0x1100,0x1100,debug=True)
-#plc.writeMem('QX0.0',True)
+# just for the record, sample to read/write floating values
 #print plc.getMem('freal10')
 #plc.writeMem('freal10',3.141592653589)
-#print plc.getMem('freal10')
-#print plc.getMem('QX0.0')
 
         myPlc = self.connectPlc()
         input_state = self.readInput(myPlc)
@@ -530,10 +549,6 @@ class initUI(QtCore.QObject):
             global tempo
             global valor
             global test
-
-                # Sinal a entrar -> corre a contagem
-                # test wejścia 18
-#                while (GPIO.input(18) == False and self.running == 1):
 
             while (input_state == False and self.running == 1):
                 if len(MainWindow.loggedInUser) == 0:
@@ -551,12 +566,8 @@ class initUI(QtCore.QObject):
 
                     # Iniciar contagem de tempo
                     self.contagem()
-#                    input_state = GPIO.input(18)
-
-                # Sinal fechado -> actualiza interface
-#                while (GPIO.input(18) == True and self.running == 1):
             while (input_state == True and self.running == 1):
-                    self.readInput(myPlc)
+                    input_state = self.readInput(myPlc)
 
                     MainWindow.someFunctionCalledFromAnotherThread("grey")
                     ##Se troax fechado
@@ -682,7 +693,7 @@ class initUI(QtCore.QObject):
             item2.setFont(font)
             return item2
 
-
+# we are not using RPi GPIO in current solution, connecting directly to PLC
 # Configuracao GPIO's
 #GPIO.setmode(GPIO.BCM)
 #GPIO.setup(18, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -745,6 +756,7 @@ MainWindow = MyWindow()
 text = QtGui.QInputDialog()
 ui = initUI(databaseName, tableName, queryLinesLimit, country, settingsWorksheet)
 ui.showMessageBoxSignal.connect(MainWindow.showMessageBox)
+ui.gui.rfid_text_edit.returnPressed.connect(MainWindow.rfidTextEditReturnPressed)
 MainWindow.messageBox.buttonClicked.connect(ui.messageBoxClosed)
 MainWindow.show()
 sys.exit(app.exec_())

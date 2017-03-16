@@ -314,6 +314,15 @@
          </property>
         </widget>
        </item>
+       <item row="2" column="0">
+        <widget class="QLineEdit" name="rfid_text_edit">
+         <property name="font">
+          <font>
+           <pointsize>22</pointsize>
+          </font>
+         </property>
+        </widget>
+       </item>
       </layout>
      </widget>
     </item>
@@ -775,7 +784,7 @@
     <item row="2" column="0">
      <widget class="QFrame" name="data_grid">
       <layout class="QGridLayout" name="gridLayout_2">
-       <item row="0" column="0">
+       <item row="0" column="1">
         <widget class="QSplitter" name="splitter_7">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
@@ -2095,7 +2104,7 @@
          </widget>
         </widget>
        </item>
-       <item row="0" column="2">
+       <item row="0" column="3">
         <widget class="QSplitter" name="splitter_6">
          <property name="enabled">
           <bool>true</bool>
@@ -2355,7 +2364,7 @@
          </widget>
         </widget>
        </item>
-       <item row="0" column="1">
+       <item row="0" column="2">
         <widget class="QSplitter" name="splitter_9">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
@@ -3678,7 +3687,7 @@
       </layout>
      </widget>
     </item>
-    <item row="3" column="0">
+    <item row="4" column="0">
      <widget class="QSplitter" name="splitter_4">
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
