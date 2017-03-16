@@ -19,6 +19,8 @@ import logging
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 import snap7 # for Siemens PLC communication
+import S7200 as plc200 # helper for S7 200 alikes
+import S71200 as plc1200 # helper for S7 120 alikes
 import serial # for reading RFID card
 
 import signal
@@ -76,10 +78,10 @@ class RfidReadingObject(QtCore.QObject):
         try:
             serialport = serial.Serial(rfid_port, rfid_baud, timeout=0)
         except:
-            logging.info("Cannot open %s. Exiting.", port)
+            logging.info("Cannot open %s. Exiting.", rfid_port)
             os.kill(os.getpid(), signal.SIGINT)
         if (serialport.isOpen() == False):
-            logging.info("Cannot open %s. Exiting.", port)
+            logging.info("Cannot open %s. Exiting.", rfid_port)
             os.kill(os.getpid(), signal.SIGINT)
         return serialport
 
@@ -455,20 +457,27 @@ class initUI(QtCore.QObject):
         with open('plc_ip') as plc_ip_file:
             plc_ip_read_data = plc_ip_file.read().split(":")
             plc_ip = plc_ip_read_data[0]
-            plc_port = int(plc_ip_read_data[len(plc_ip_read_data) - 1])
-        logging.info("connecting to PLC: %s, port: %s", plc_ip, plc_port)
-        plc = snap7.client.Client()
+            plc_port = int(plc_ip_read_data[1])
+            plc_rack = int(plc_ip_read_data[2])
+            plc_slot = int(plc_ip_read_data[3])
+        logging.info("connecting to PLC: %s, port: %s, rack: %s, slot: %s", plc_ip, plc_port, plc_rack, plc_slot)
+#        plc = snap7.client.Client()
         try:
-            plc.connect(plc_ip,11,11,plc_port)
+            plc = plc200.S7_200(plc_ip, plc_rack, plc_slot, debug=True)
+#            plc.connect(plc_ip,plc_rack,plc_slot,plc_port)
         except:
-            logging.info("Cannot connect to plc: %s on port: %s. Exiting", plc_ip, plc_port)
+            logging.info("Cannot connect to plc: %s on port: %s (rack: %s, slot: %s). Exiting", plc_ip, plc_port, plc_rack, plc_slot)
             os.kill(os.getpid(), signal.SIGINT)
-        logging.info("plc connected: %s", plc.get_connected())        
+        logging.info("plc connected: %s", plc.get_connected())
+        return plc
     
     def tempReadInput(self):
         with open('simulate_gpio.json') as gpio_simulator:
             input_var = bool(json.loads(gpio_simulator.read())['bcm'][18])
             return input_var
+
+    def readInput(self):
+
 
     def messageBoxClosed(self, buttonClicked):
         self.messageBoxVisible = False
@@ -477,10 +486,20 @@ class initUI(QtCore.QObject):
 
         global plc_ip
         global plc_port
+        global plc_rack
+        global plc_slot
         global input_state
         global serialport
 
-        self.connectPlc()
+#plc = p.S7_200('10.10.55.250',0x1100,0x1100,debug=True)
+#plc.writeMem('QX0.0',True)
+#print plc.getMem('freal10')
+#plc.writeMem('freal10',3.141592653589)
+#print plc.getMem('freal10')
+#print plc.getMem('QX0.0')
+
+        myPlc = self.connectPlc()
+        input_state = myPlc.getMem('IX0.0')
         input_state = self.tempReadInput()
         # Corre se a aplicacao estiver a correr
 
@@ -585,7 +604,6 @@ class initUI(QtCore.QObject):
 
     def getFirstThreeLettersOfUser(self, user):
         list = user.split(" ")
-        logging.info(list)
         strippedUser = ""
         if (len(list) >= 2):
             strippedUser = list[0][:3] + list[1][:3]
@@ -594,13 +612,10 @@ class initUI(QtCore.QObject):
     ### Update dos melhores tempos
     def updateMelhores(self):
 
-        logging.info("UPDATING MELHORES! :D")
         ## Faz query a base de dados dos dados a apresentar na tabela
         tabela = self.dbu.GetTable_best_data("data", "hora", "tempo", "cor", "user")
-        logging.info("tabela: %s", tabela)
         ## Obtem um array os valores convertidos para apresentar na tabela
         dados = self.obterArrayDeValoresConvertidos(tabela)
-        logging.info("dados: %s", dados)
         ## Apresenta as linhas na tabela de acordo com as configuracoes de cor, tamabho de letra e centramento
         for valor in range(0, len(dados)):
             itemTempo = self.itemParalinhaDaTabela(0, dados, valor, 19)
