@@ -11,11 +11,11 @@ class output(object):
     sint = 6
 	
 class S7_200():
-    def __init__(self,ip,localtsap,remotetsap,debug=False):
+    def __init__(self,ip,port,rack,slot,debug=False):
         self.plc = snap7.client.Client()
         #self.plc.set_connection_params(ip,localtsap,remotetsap)
         self.debug=debug
-        self.plc.connect(ip,localtsap,remotetsap,102)
+        self.plc.connect(ip,rack,slot,port)
         if(self.plc.get_connected()):
 			print 'connected'
     def getMem(self,mem, returnByte=False):

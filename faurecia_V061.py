@@ -193,7 +193,9 @@ class initUI(QtCore.QObject):
 
     showMessageBoxSignal = QtCore.pyqtSignal('QString', 'QString')
     messageBoxVisible = False
-    
+    input_state = True
+    plc = None
+
 
     # Inicia a aplicacao global
     # Define queue , timer e inicia loop principal de contagem
@@ -489,37 +491,56 @@ class initUI(QtCore.QObject):
             plc_slot = int(plc_ip_read_data[3])
         logging.info("connecting to PLC: %s, port: %s, rack: %s, slot: %s", plc_ip, plc_port, plc_rack, plc_slot)
         try:
-            plc = plc200.S7_200(plc_ip, plc_rack, plc_slot, debug=True)
+            self.plc = plc200.S7_200(plc_ip, plc_port, plc_rack, plc_slot, debug=True)
         except:
-            logging.info("Cannot connect to plc: %s on port: %s (rack: %s, slot: %s). Exiting", plc_ip, plc_port, plc_rack, plc_slot)
-            os.kill(os.getpid(), signal.SIGINT)
-        return plc
+            logging.info("Cannot connect to plc: %s on port: %s (rack: %s, slot: %s).", plc_ip, plc_port, plc_rack, plc_slot)
+            logging.info("Check your plc ip address, port, rack and slot")
+            logging.info("Check if you can ping your PLC")
+#            os.kill(os.getpid(), signal.SIGINT)
     
     def tempReadInput(self):
         with open('simulate_gpio.json') as gpio_simulator:
             input_var = bool(json.loads(gpio_simulator.read())['bcm'][18])
             return input_var
 
-    def readInput(self,plc):
+    def readInput(self):
         myInput = ""
+        local_input_state = self.input_state
         with open('plc_data') as plc_data_file:
             plc_data_list = plc_data_file.readlines()
             myInput = plc_data_list[1]
-        return plc.getMem(myInput)
+        try:
+            local_input_state = self.plc.getMem(myInput)
+        except:
+            logging.info("Failed to read input state. input value left unchanged: %s", self.input_state)
+            logging.info("Reconnecting to server now...")
+            self.connectPlc()
+            return self.input_state
+        return local_input_state
     
-    def setHorn(self,plc,status):
+    def setHorn(self,status):
         myOutput = ""
         with open('plc_data') as plc_data_file:
             plc_data_list = plc_data_file.readlines()
             myOutput = plc_data_list[3]
-        plc.writeMem(myOutput,status)
+        try:
+            self.plc.writeMem(myOutput,status)
+        except:
+            logging.info("Failed to write %s with: %s",myOutput, status)
+            logging.info("Reconnecting to server now...")
+            self.connectPlc()
 
-    def setRelay(self,plc,status):
+    def setRelay(self,status):
         myOutput = ""
         with open('plc_data') as plc_data_file:
             plc_data_list = plc_data_file.readlines()
             myOutput = plc_data_list[5]
-        plc.writeMem(myOutput,status)
+        try:
+            self.plc.writeMem(myOutput,status)
+        except:
+            logging.info("Failed to write %s with: %s",myOutput, status)
+            logging.info("Reconnecting to server now...")
+            self.connectPlc()
     
     def messageBoxClosed(self, buttonClicked):
         self.messageBoxVisible = False
@@ -530,15 +551,14 @@ class initUI(QtCore.QObject):
         global plc_port
         global plc_rack
         global plc_slot
-        global input_state
         global serialport
 
 # just for the record, sample to read/write floating values
 #print plc.getMem('freal10')
 #plc.writeMem('freal10',3.141592653589)
 
-        myPlc = self.connectPlc()
-        input_state = self.readInput(myPlc)
+        self.connectPlc()
+        self.input_state = self.readInput()
         # Corre se a aplicacao estiver a correr
 
         while (self.running == 1):
@@ -550,14 +570,14 @@ class initUI(QtCore.QObject):
             global valor
             global test
 
-            while (input_state == False and self.running == 1):
+            while (self.input_state == False and self.running == 1):
                 if len(MainWindow.loggedInUser) == 0:
                     if self.messageBoxVisible == False:
                         self.showMessageBoxSignal.emit(self.messageBoxText, self.messageBoxTitle)
                         self.messageBoxVisible = True
                 else:
-                    input_state = self.readInput(myPlc)
-            
+                    self.input_state = self.readInput()
+
                     self.timer.start(80)
 
                     ## Se troax aberto iniciar tempo
@@ -566,25 +586,25 @@ class initUI(QtCore.QObject):
 
                     # Iniciar contagem de tempo
                     self.contagem()
-            while (input_state == True and self.running == 1):
-                    input_state = self.readInput(myPlc)
+            while (self.input_state == True and self.running == 1):
+                self.input_state = self.readInput()
 
+                MainWindow.someFunctionCalledFromAnotherThread("grey")
+                ##Se troax fechado
+                inicio = True
+                aberto = False
+                # Actualiza ultimo tempo no interface
+                # Limpa tempo actual
+                if (ultimo != 0):
+                    thread3 = threading.Thread(target=self.insereDB, args=(tempo,))
+                    thread3.start()
+
+                ultimo = 0
+                if test == True:
                     MainWindow.someFunctionCalledFromAnotherThread("grey")
-                    ##Se troax fechado
-                    inicio = True
-                    aberto = False
-                    # Actualiza ultimo tempo no interface
-                    # Limpa tempo actual
-                    if (ultimo != 0):
-                        thread3 = threading.Thread(target=self.insereDB, args=(tempo,))
-                        thread3.start()
+                    test= False
 
-                    ultimo = 0
-                    if test == True:
-                        MainWindow.someFunctionCalledFromAnotherThread("grey")
-                        test= False
-
-                    time.sleep(velocidade)
+                time.sleep(velocidade)
 
 
     def insereDB(self,  temp):
