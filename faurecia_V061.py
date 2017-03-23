@@ -154,14 +154,19 @@ class MyWindow(QtGui.QMainWindow):
         if not newUser:
             logging.info("no user assigned to RFID card: %s", ui.gui.rfid_text_edit.text())
             ui.gui.rfid_text_edit.clear()
+            ui.gui.data_grid.setVisible(False)
+            ui.gui.login_info_box.setVisible(True)
             return
         if newUser == self.loggedInUser:
             logging.info("logging out: %s", newUser)
             self.loggedInUser = ""
+            ui.gui.data_grid.setVisible(False)
+            ui.gui.login_info_box.setVisible(True)
         else:
             logging.info("logging in: %s", newUser)
             self.loggedInUser = newUser
-            self.messageBox.done(1)
+            ui.gui.login_info_box.setVisible(False)
+            ui.gui.data_grid.setVisible(True)
         ui.gui.label_logged_in_name.setText(unicode(self.loggedInUser))
         ui.gui.rfid_text_edit.clear()
 
@@ -271,6 +276,7 @@ class initUI(QtCore.QObject):
     def defineUI(self, myUI ,country, settingsWorksheet):
         global dbu
         global tempoObjectivo
+        global tempoIntermedio
         global line
 
         messageBoxText = ""
@@ -310,6 +316,7 @@ class initUI(QtCore.QObject):
             self.messageBoxTitle = "%s" % (unicode(settingsWorksheet['H17'].value))
             myUI.label_user_latest.setText("%s" % (unicode(settingsWorksheet['H18'].value)))
             myUI.label_user_best.setText("%s" % (unicode(settingsWorksheet['H18'].value)))
+            myUI.login_required_message("%s" % (unicode(settingsWorksheet['H19'].value)))
             self.saveCountry("PT")
 
 
@@ -346,6 +353,7 @@ class initUI(QtCore.QObject):
             self.messageBoxTitle = "%s" % (unicode(settingsWorksheet['I17'].value))
             myUI.label_user_latest.setText("%s" % (unicode(settingsWorksheet['I18'].value)))
             myUI.label_user_best.setText("%s" % (unicode(settingsWorksheet['I18'].value)))
+            myUI.login_required_message.setText("%s" % (unicode(settingsWorksheet['I19'].value)))
             self.saveCountry("PL")
 
 
@@ -359,6 +367,9 @@ class initUI(QtCore.QObject):
 
         myUI.tabela_ultimos.setDisabled(True)
         myUI.tabela_melhores.setDisabled(True)
+
+        myUI.data_grid.setVisible(False)
+        myUI.login_info_box.setVisible(True)
 
     def saveCountry(self, newCountry):
 
@@ -448,7 +459,6 @@ class initUI(QtCore.QObject):
         segundos= int(ultimo.total_seconds())
         tempo = ultimo
         segundspar = (segundos % 2 == 0)
-
 
         if ultimo < timedelta(seconds= tempoObjectivo):
             if segundspar:
@@ -558,6 +568,7 @@ class initUI(QtCore.QObject):
 #plc.writeMem('freal10',3.141592653589)
 
         self.connectPlc()
+#        self.input_state = self.tempReadInput()
         self.input_state = self.readInput()
         # Corre se a aplicacao estiver a correr
 
@@ -572,10 +583,12 @@ class initUI(QtCore.QObject):
 
             while (self.input_state == False and self.running == 1):
                 if len(MainWindow.loggedInUser) == 0:
-                    if self.messageBoxVisible == False:
-                        self.showMessageBoxSignal.emit(self.messageBoxText, self.messageBoxTitle)
-                        self.messageBoxVisible = True
+#                    if self.messageBoxVisible == False:
+#                        self.showMessageBoxSignal.emit(self.messageBoxText, self.messageBoxTitle)
+#                        self.messageBoxVisible = True
+                    time.sleep(velocidade)
                 else:
+#                    self.input_state = self.tempReadInput()
                     self.input_state = self.readInput()
 
                     self.timer.start(80)
@@ -587,6 +600,7 @@ class initUI(QtCore.QObject):
                     # Iniciar contagem de tempo
                     self.contagem()
             while (self.input_state == True and self.running == 1):
+#                self.input_state = self.tempReadInput()
                 self.input_state = self.readInput()
 
                 MainWindow.someFunctionCalledFromAnotherThread("grey")
