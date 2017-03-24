@@ -102,6 +102,7 @@ class LoadImageThread(QtCore.QThread):
 class MyWindow(QtGui.QMainWindow):
 
     loggedInUser = ""
+    loggedInUserChanged = QtCore.pyqtSignal('QString', 'bool')
 
     def initMessageBox(self):
         # Create a custom font (BIG one)
@@ -154,8 +155,6 @@ class MyWindow(QtGui.QMainWindow):
         if not newUser:
             logging.info("no user assigned to RFID card: %s", ui.gui.rfid_text_edit.text())
             ui.gui.rfid_text_edit.clear()
-            ui.gui.data_grid.setVisible(False)
-            ui.gui.login_info_box.setVisible(True)
             return
         if newUser == self.loggedInUser:
             logging.info("logging out: %s", newUser)
@@ -169,6 +168,9 @@ class MyWindow(QtGui.QMainWindow):
             ui.gui.data_grid.setVisible(True)
         ui.gui.label_logged_in_name.setText(unicode(self.loggedInUser))
         ui.gui.rfid_text_edit.clear()
+
+        self.loggedInUserChanged.emit(self.loggedInUser, len(self.loggedInUser) > 0)
+
 
     def showMessageBox(self, text, title):
         self.messageBox.setText(text)
@@ -192,6 +194,7 @@ class MyWindow(QtGui.QMainWindow):
         #initialize messagebox
         self.initMessageBox()
 
+
 #Init UI Class
 class initUI(QtCore.QObject):
 
@@ -200,6 +203,7 @@ class initUI(QtCore.QObject):
     messageBoxVisible = False
     input_state = True
     plc = None
+#    lastHornStatus = True
 
 
     # Inicia a aplicacao global
@@ -251,9 +255,6 @@ class initUI(QtCore.QObject):
         self.updateMelhores()
         self.updateUltimos()
 
-
-        thread1 = threading.Thread(target=self.cronometro)
-        thread1.start()
 
         #RFID reader thread - not used since used RFID card reader does not write to serialport, but
         #                     directly to stdout - just like a normal keyboard
@@ -477,7 +478,7 @@ class initUI(QtCore.QObject):
         else:
             if segundspar:
                 MainWindow.someFunctionCalledFromAnotherThread("red")
-
+                self.setHorn(True)
             else:
 
                 MainWindow.someFunctionCalledFromAnotherThread("grey")
@@ -537,7 +538,11 @@ class initUI(QtCore.QObject):
             plc_data_list = plc_data_file.readlines()
             myOutput = plc_data_list[3]
         try:
-            self.plc.writeMem(myOutput,status)
+#            if (self.lastHornStatus is not status):
+            if (self.plc.getMem(myOutput) is not status):
+                logging.info("set horn: %s to: %s", myOutput, status)
+#                self.lastHornStatus = status
+                self.plc.writeMem(myOutput,status)
         except:
             logging.info("Failed to write %s with: %s",myOutput, status)
             logging.info("Reconnecting to server now...")
@@ -549,7 +554,9 @@ class initUI(QtCore.QObject):
             plc_data_list = plc_data_file.readlines()
             myOutput = plc_data_list[5]
         try:
-            self.plc.writeMem(myOutput,status)
+            if (self.plc.getMem(myOutput) is not status):
+                logging.info("set relay: %s to: %s", myOutput, status)
+                self.plc.writeMem(myOutput,status)
         except:
             logging.info("Failed to write %s with: %s",myOutput, status)
             logging.info("Reconnecting to server now...")
@@ -557,6 +564,9 @@ class initUI(QtCore.QObject):
     
     def messageBoxClosed(self, buttonClicked):
         self.messageBoxVisible = False
+
+    def loggedInUserChanged(self, user, state):
+        self.setRelay(state)
 
     def cronometro(self):
 
@@ -570,7 +580,6 @@ class initUI(QtCore.QObject):
 #print plc.getMem('freal10')
 #plc.writeMem('freal10',3.141592653589)
 
-        self.connectPlc()
         self.input_state = self.readInput()
         # Corre se a aplicacao estiver a correr
 
@@ -603,6 +612,7 @@ class initUI(QtCore.QObject):
             while (self.input_state == True and self.running == 1):
                 self.input_state = self.readInput()
 
+                self.setHorn(False)
                 MainWindow.someFunctionCalledFromAnotherThread("grey")
                 ##Se troax fechado
                 inicio = True
@@ -662,7 +672,8 @@ class initUI(QtCore.QObject):
 
             itemUser = self.itemParalinhaDaTabela(3, dados, valor, 10)
             itemUser.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
-            itemUser.setText(self.getFirstThreeLettersOfUser((dados[valor])[3]))
+            itemUser.setText(self.getSecondPartOfUser((dados[valor])[3]))
+#            itemUser.setText(self.getFirstThreeLettersOfUser((dados[valor])[3]))
 
             self.gui.tabela_ultimos.setItem(valor, 2, itemUser)
 
@@ -671,6 +682,13 @@ class initUI(QtCore.QObject):
         strippedUser = ""
         if (len(list) >= 2):
             strippedUser = list[0][:3] + list[1][:3]
+        return strippedUser
+
+    def getSecondPartOfUser(self, user):
+        list = user.split(" ")
+        strippedUser = ""
+        if (len(list) >= 2):
+            strippedUser = list[1]
         return strippedUser
 
     ### Update dos melhores tempos
@@ -692,7 +710,8 @@ class initUI(QtCore.QObject):
 
             itemUser = self.itemParalinhaDaTabela(3, dados, valor, 10)
             itemUser.setTextAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
-            itemUser.setText(self.getFirstThreeLettersOfUser((dados[valor])[3]))
+            itemUser.setText(self.getSecondPartOfUser((dados[valor])[3]))
+#            itemUser.setText(self.getFirstThreeLettersOfUser((dados[valor])[3]))
 
             self.gui.tabela_melhores.setItem(valor, 2, itemUser)
 
@@ -789,9 +808,19 @@ app = QtGui.QApplication(sys.argv)
 MainWindow = MyWindow()
 text = QtGui.QInputDialog()
 ui = initUI(databaseName, tableName, queryLinesLimit, country, settingsWorksheet)
+ui.connectPlc()
+ui.setHorn(False)
+ui.setRelay(False)
 ui.showMessageBoxSignal.connect(MainWindow.showMessageBox)
+
+MainWindow.loggedInUserChanged.connect(ui.loggedInUserChanged)
 ui.gui.rfid_text_edit.returnPressed.connect(MainWindow.rfidTextEditReturnPressed)
+
 MainWindow.messageBox.buttonClicked.connect(ui.messageBoxClosed)
+
+thread1 = threading.Thread(target=ui.cronometro)
+thread1.start()
+
 MainWindow.showMaximized()
 sys.exit(app.exec_())
 
