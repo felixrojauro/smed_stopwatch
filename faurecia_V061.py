@@ -523,7 +523,7 @@ class initUI(QtCore.QObject):
             plc_data_list = plc_data_file.readlines()
             myInput = plc_data_list[1]
         try:
-            local_input_state = self.plc.getMem(myInput)
+            local_input_state = not self.plc.getMem(myInput)
         except:
             logging.info("Failed to read input state. input value left unchanged: %s", self.input_state)
             logging.info("Reconnecting to server now...")
