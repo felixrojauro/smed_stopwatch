@@ -1,0 +1,9 @@
+do zaciągnięcia świezej wersji:
+git stash
+git pull --rebase
+git stash apply
+
+do dodania programu do autostartu - UWAGA. ZROBIĆ TYLKO RAZ, jak coś pójdzie nie tak, dzwonić :D
+echo "@/bin/bash /home/pi/Desktop/eSmed_kuba/smed_stopwatch/smed_stopwatch_autorun.sh
+
+
