@@ -1,3 +1,11 @@
+w pliku plc_data: 
+input_door -> wejście/marker z którego czytamy kiedy wystartować stoper
+IX40.0
+output_horn -> wyjście/marker który wysterowujemy gdy maxymalny czas przezbrojenia zostanie przekroczony, zerowany po zamknięciu drzwi
+QX550.0
+output_relay -> wyjście/marker który wysterowujemy gdy uzytkownik jest zalogowany i zerujemy gdy nikt nie jest zalogowany
+QX550.1
+
 do zaciągnięcia świezej wersji:
 git stash
 git pull --rebase
