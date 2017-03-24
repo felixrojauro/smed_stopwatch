@@ -86,13 +86,13 @@ class DatabaseUtility:
 
     #Obter valor limite para circulo verde . Valor a mostrar no tempo objectivo
     def obterValorlimite(self, limite):
-        SEG = str(timedelta(seconds=limite))[3:]
-        if (SEG == str("9:59")):
-            limite = str(timedelta(seconds=limite))[3:]
+#        SEG = str(timedelta(seconds=limite))[3:]
+#        if (SEG == str("9:59")):
+#            limite = str(timedelta(seconds=limite))[3:]
 
-        else:
-            limite = "0"+str(timedelta(seconds=limite))[3:]
-        return limite
+#        else:
+#            limite = str(timedelta(seconds=limite))[2:]
+        return str(timedelta(seconds=limite))[2:]
 
 
     ## Obter tabela dos ultimos tempos
@@ -110,6 +110,10 @@ class DatabaseUtility:
         self.CreateTable()
         limiteTempoInferior = self.obterValorlimite(self.tempoMinimo)
         limiteTempoSuperior = self.obterValorlimite(self.tempoMaximo)
+        print("tempoMinimo: %s", self.tempoMinimo)
+        print("limiteTempoInferior: %s", limiteTempoInferior)
+        print("tempoMaximo: %s", self.tempoMaximo)
+        print("limiteTempoSuperior: %s", limiteTempoSuperior)
         return self.RunCommand("SELECT DISTINCT  %s,%s,%s,%s,%s "
                                "FROM %s "
                                "WHERE linha = '%s' "
@@ -165,8 +169,9 @@ class DatabaseUtility:
         tempoMinimo = timedelta(seconds=self.tempoMinimo)
         tempoMaximo = timedelta(seconds=self.tempoMaximo)
 
-
-        print  self.tempoObjectivo
+        print ("tempo %s", str(tempo))
+        print ("tempo_Objectivo %s", str(tempo_Objectivo))
+        print ("tempo_Intermedio %s", str(tempo_Intermedio))
         if tempo < tempo_Objectivo:
             self.cursor.execute("SELECT cor FROM Cores WHERE tempo_max = '%s'", [self.tempoObjectivo])
             teste = self.RunCommand2()

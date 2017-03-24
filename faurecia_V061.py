@@ -501,6 +501,8 @@ class initUI(QtCore.QObject):
             plc_slot = int(plc_ip_read_data[3])
         logging.info("connecting to PLC: %s, port: %s, rack: %s, slot: %s", plc_ip, plc_port, plc_rack, plc_slot)
         try:
+            if (self.plc is not None and self.plc.get_connected() is True):
+                self.plc.disconnect()
             self.plc = plc200.S7_200(plc_ip, plc_port, plc_rack, plc_slot, debug=True)
         except:
             logging.info("Cannot connect to plc: %s on port: %s (rack: %s, slot: %s).", plc_ip, plc_port, plc_rack, plc_slot)
@@ -514,6 +516,7 @@ class initUI(QtCore.QObject):
             return input_var
 
     def readInput(self):
+#        return self.tempReadInput()
         myInput = ""
         local_input_state = self.input_state
         with open('plc_data') as plc_data_file:
@@ -568,7 +571,6 @@ class initUI(QtCore.QObject):
 #plc.writeMem('freal10',3.141592653589)
 
         self.connectPlc()
-#        self.input_state = self.tempReadInput()
         self.input_state = self.readInput()
         # Corre se a aplicacao estiver a correr
 
@@ -588,7 +590,6 @@ class initUI(QtCore.QObject):
 #                        self.messageBoxVisible = True
                     time.sleep(velocidade)
                 else:
-#                    self.input_state = self.tempReadInput()
                     self.input_state = self.readInput()
 
                     self.timer.start(80)
@@ -600,7 +601,6 @@ class initUI(QtCore.QObject):
                     # Iniciar contagem de tempo
                     self.contagem()
             while (self.input_state == True and self.running == 1):
-#                self.input_state = self.tempReadInput()
                 self.input_state = self.readInput()
 
                 MainWindow.someFunctionCalledFromAnotherThread("grey")
@@ -792,7 +792,7 @@ ui = initUI(databaseName, tableName, queryLinesLimit, country, settingsWorksheet
 ui.showMessageBoxSignal.connect(MainWindow.showMessageBox)
 ui.gui.rfid_text_edit.returnPressed.connect(MainWindow.rfidTextEditReturnPressed)
 MainWindow.messageBox.buttonClicked.connect(ui.messageBoxClosed)
-MainWindow.show()
+MainWindow.showMaximized()
 sys.exit(app.exec_())
 
 

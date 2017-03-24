@@ -12,8 +12,8 @@
   </property>
   <property name="maximumSize">
    <size>
-    <width>1280</width>
-    <height>1024</height>
+    <width>12345678</width>
+    <height>12345678</height>
    </size>
   </property>
   <property name="font">
@@ -316,6 +316,12 @@
        </item>
        <item row="2" column="0">
         <widget class="QLineEdit" name="rfid_text_edit">
+         <property name="maximumSize">
+          <size>
+           <width>1</width>
+           <height>1</height>
+          </size>
+         </property>
          <property name="font">
           <font>
            <pointsize>22</pointsize>
@@ -3353,7 +3359,7 @@
             </property>
             <property name="maximumSize">
              <size>
-              <width>1255</width>
+              <width>12345678</width>
               <height>400</height>
              </size>
             </property>
