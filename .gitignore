@@ -87,3 +87,9 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+plc_data
+plc_ip
+country.txt
+RFid
+rfid_port
